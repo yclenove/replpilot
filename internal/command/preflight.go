@@ -1,11 +1,7 @@
 package command
 
 import (
-	"context"
 	"fmt"
-	"os/exec"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -109,6 +105,9 @@ func checkStaticSource(source *config.Source) checkResult {
 	if source.MasterHost == "" || source.MasterPort <= 0 || source.ReplUser == "" {
 		return checkResult{Name: "source配置完整性", OK: false, Detail: "master_host/master_port/repl_user 不能为空"}
 	}
+	if source.ReplPass == "" {
+		return checkResult{Name: "source配置完整性", OK: false, Detail: "repl_pass 不能为空（用于 bootstrap 真执行）"}
+	}
 	return checkResult{Name: "source配置完整性", OK: true, Detail: fmt.Sprintf("%s:%d", source.MasterHost, source.MasterPort)}
 }
 
@@ -123,25 +122,7 @@ func checkStaticReplica(host *config.Host) checkResult {
 }
 
 func checkRemoteCommand(host *config.Host, timeoutSec int, name string, remoteCmd string) checkResult {
-	args := []string{
-		"-o", "BatchMode=yes",
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "ConnectTimeout=" + strconv.Itoa(timeoutSec),
-		"-p", strconv.Itoa(host.Port),
-	}
-	if host.KeyPath != "" {
-		args = append(args, "-i", host.KeyPath)
-	}
-	args = append(args, host.User+"@"+host.Address, remoteCmd)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec+2)*time.Second)
-	defer cancel()
-
-	out, err := exec.CommandContext(ctx, "ssh", args...).CombinedOutput()
-	detail := strings.TrimSpace(string(out))
-	if detail == "" {
-		detail = "(no output)"
-	}
+	detail, err := runSSHCommand(host, timeoutSec, remoteCmd)
 	if err != nil {
 		return checkResult{Name: name, OK: false, Detail: detail}
 	}

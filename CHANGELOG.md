@@ -22,3 +22,8 @@
 - Summary: 打通 bootstrap/status/diagnose 的任务状态链路，并持久化 preflight 结果供诊断复用。
 - Affected: `internal/state/task.go`, `internal/command/bootstrap.go`, `internal/command/preflight.go`, `internal/command/status.go`, `internal/command/diagnose.go`, `README.md`, `docs/开发文档.md`, `docs/开发留痕.md`
 - Impact: 工具具备基础任务可观测能力，能追踪最近执行状态并输出诊断建议，便于后续接入真实复制执行。
+
+## 2026-04-21
+- Summary: 接入 bootstrap 真执行链路，支持通过 SSH 在从库执行 STOP/CHANGE/START REPLICA。
+- Affected: `internal/command/bootstrap.go`, `internal/command/ssh_exec.go`, `internal/command/preflight.go`, `internal/command/source.go`, `internal/config/store.go`, `README.md`, `docs/开发文档.md`, `docs/开发留痕.md`
+- Impact: 工具从“仅编排可观测”升级为“可触发真实复制配置”，可在受控环境完成主从初始化闭环。

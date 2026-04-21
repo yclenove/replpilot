@@ -17,7 +17,7 @@ func newSourceCmd() *cobra.Command {
 }
 
 func newSourceAddCmd() *cobra.Command {
-	var id, masterHost, replUser string
+	var id, masterHost, replUser, replPass string
 	var masterPort int
 
 	cmd := &cobra.Command{
@@ -45,6 +45,7 @@ func newSourceAddCmd() *cobra.Command {
 				MasterHost: masterHost,
 				MasterPort: masterPort,
 				ReplUser:   replUser,
+				ReplPass:   replPass,
 			})
 			if err := config.Save(path, cfg); err != nil {
 				return err
@@ -58,6 +59,7 @@ func newSourceAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&masterHost, "master-host", "", "主库地址")
 	cmd.Flags().IntVar(&masterPort, "master-port", 3306, "主库端口")
 	cmd.Flags().StringVar(&replUser, "repl-user", "", "复制账号")
+	cmd.Flags().StringVar(&replPass, "repl-pass", "", "复制账号密码（注意: 当前为明文存储）")
 	return cmd
 }
 
@@ -79,7 +81,7 @@ func newSourceListCmd() *cobra.Command {
 				return nil
 			}
 			for _, item := range cfg.Sources {
-				fmt.Printf("- id=%s master=%s:%d repl_user=%s\n", item.ID, item.MasterHost, item.MasterPort, item.ReplUser)
+				fmt.Printf("- id=%s master=%s:%d repl_user=%s has_pass=%v\n", item.ID, item.MasterHost, item.MasterPort, item.ReplUser, item.ReplPass != "")
 			}
 			return nil
 		},

@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,9 @@ func newBootstrapCmd() *cobra.Command {
 	var replicaID string
 	var mode string
 	var dryRun bool
+	var timeoutSec int
+	var mysqlUser string
+	var mysqlPass string
 
 	cmd := &cobra.Command{
 		Use:   "bootstrap",
@@ -60,8 +64,18 @@ func newBootstrapCmd() *cobra.Command {
 				UpdatedAt: now,
 			}
 			if !dryRun {
-				task.Status = "partial"
-				task.Message = "当前版本已记录任务编排，但真实复制变更尚未接入，请先使用 --dry-run 验证流程"
+				replica, _ := cfg.FindHost(replicaID)
+				source, _ := cfg.FindSource(sourceID)
+				remoteSQL := buildReplicationSQL(source)
+				remoteCmd := buildReplicaMySQLCommand(mysqlUser, mysqlPass, remoteSQL)
+				out, execErr := runSSHCommand(replica, timeoutSec, remoteCmd)
+				if execErr != nil {
+					task.Status = "failed"
+					task.Message = "复制命令执行失败: " + out
+				} else {
+					task.Status = "success"
+					task.Message = "复制命令执行成功，已尝试 STOP/CHANGE/START REPLICA。输出: " + out
+				}
 			}
 			if err := state.AppendTask(task); err != nil {
 				return err
@@ -80,6 +94,35 @@ func newBootstrapCmd() *cobra.Command {
 	cmd.Flags().StringVar(&replicaID, "replica", "", "从库主机 ID")
 	cmd.Flags().StringVar(&mode, "mode", "auto", "初始化模式：auto|physical|logical")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", true, "仅模拟执行流程，不进行真实变更")
+	cmd.Flags().IntVar(&timeoutSec, "timeout", 12, "远程执行超时秒数")
+	cmd.Flags().StringVar(&mysqlUser, "mysql-user", "root", "从库本地执行 mysql 的账号")
+	cmd.Flags().StringVar(&mysqlPass, "mysql-pass", "", "从库本地 mysql 账号密码（留空表示无密码）")
 
 	return cmd
+}
+
+func buildReplicationSQL(source *config.Source) string {
+	escapedHost := escapeSQLString(source.MasterHost)
+	escapedUser := escapeSQLString(source.ReplUser)
+	escapedPass := escapeSQLString(source.ReplPass)
+	return fmt.Sprintf(
+		"STOP REPLICA; CHANGE REPLICATION SOURCE TO SOURCE_HOST='%s', SOURCE_PORT=%d, SOURCE_USER='%s', SOURCE_PASSWORD='%s', SOURCE_AUTO_POSITION=1; START REPLICA;",
+		escapedHost, source.MasterPort, escapedUser, escapedPass,
+	)
+}
+
+func buildReplicaMySQLCommand(mysqlUser, mysqlPass, sql string) string {
+	base := "mysql -u " + shellEscape(mysqlUser)
+	if mysqlPass != "" {
+		base += " -p" + shellEscape(mysqlPass)
+	}
+	return base + " -e " + shellEscape(sql)
+}
+
+func escapeSQLString(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
+func shellEscape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }

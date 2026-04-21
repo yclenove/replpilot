@@ -26,6 +26,7 @@ type Source struct {
 	MasterHost string `json:"master_host"`
 	MasterPort int    `json:"master_port"`
 	ReplUser   string `json:"repl_user"`
+	ReplPass   string `json:"repl_pass,omitempty"`
 }
 
 type Config struct {
