@@ -24,8 +24,8 @@ go run ./cmd/replpilot host add --id r1 --address 10.0.0.12 --user root --key-pa
 go run ./cmd/replpilot source add --id prod-master --master-host 10.0.0.10 --repl-user repl --repl-pass 'your_repl_pass'
 go run ./cmd/replpilot preflight --source prod-master --replica r1
 go run ./cmd/replpilot bootstrap --source prod-master --replica r1 --mode auto --dry-run
-go run ./cmd/replpilot bootstrap --source prod-master --replica r1 --mode auto --dry-run=false --mysql-user root --mysql-pass 'your_mysql_root_pass'
-go run ./cmd/replpilot status --source prod-master --replica r1
+go run ./cmd/replpilot bootstrap --source prod-master --replica r1 --mode auto --dry-run=false --force --mysql-user root --mysql-pass 'your_mysql_root_pass'
+go run ./cmd/replpilot status --source prod-master --replica r1 --mysql-user root --mysql-pass 'your_mysql_root_pass'
 go run ./cmd/replpilot diagnose --source prod-master --replica r1
 ```
 

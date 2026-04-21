@@ -24,6 +24,9 @@ type Task struct {
 	Status    string    `json:"status"`
 	Steps     []string  `json:"steps"`
 	Message   string    `json:"message"`
+	PreStatus string    `json:"pre_status,omitempty"`
+	PostStatus string   `json:"post_status,omitempty"`
+	RollbackHint string `json:"rollback_hint,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

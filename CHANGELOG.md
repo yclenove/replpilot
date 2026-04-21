@@ -27,3 +27,13 @@
 - Summary: 接入 bootstrap 真执行链路，支持通过 SSH 在从库执行 STOP/CHANGE/START REPLICA。
 - Affected: `internal/command/bootstrap.go`, `internal/command/ssh_exec.go`, `internal/command/preflight.go`, `internal/command/source.go`, `internal/config/store.go`, `README.md`, `docs/开发文档.md`, `docs/开发留痕.md`
 - Impact: 工具从“仅编排可观测”升级为“可触发真实复制配置”，可在受控环境完成主从初始化闭环。
+
+## 2026-04-21
+- Summary: 增强 status/diagnose 运行态能力，支持远程读取复制状态并输出针对性修复建议。
+- Affected: `internal/command/status.go`, `internal/command/diagnose.go`, `README.md`, `docs/开发文档.md`, `docs/开发留痕.md`
+- Impact: 复制链路异常定位效率提升，可直接看到 IO/SQL 线程和错误信息并获得修复方向。
+
+## 2026-04-21
+- Summary: 增强 bootstrap 真执行安全性，新增 --force 确认、执行前后状态快照与失败回滚建议 SQL。
+- Affected: `internal/command/bootstrap.go`, `internal/command/status.go`, `internal/command/diagnose.go`, `internal/state/task.go`, `README.md`, `docs/开发文档.md`, `docs/开发留痕.md`
+- Impact: 高风险复制变更更安全可控，失败后可快速参考回滚建议恢复原状态。

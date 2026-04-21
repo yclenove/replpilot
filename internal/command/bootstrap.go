@@ -18,6 +18,7 @@ func newBootstrapCmd() *cobra.Command {
 	var timeoutSec int
 	var mysqlUser string
 	var mysqlPass string
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "bootstrap",
@@ -64,17 +65,25 @@ func newBootstrapCmd() *cobra.Command {
 				UpdatedAt: now,
 			}
 			if !dryRun {
+				if !force {
+					return fmt.Errorf("高风险操作：真实写入复制配置前请显式传入 --force")
+				}
 				replica, _ := cfg.FindHost(replicaID)
 				source, _ := cfg.FindSource(sourceID)
+				preOut, _ := runSSHCommand(replica, timeoutSec, buildShowReplicaStatusCmd(mysqlUser, mysqlPass))
+				task.PreStatus = preOut
 				remoteSQL := buildReplicationSQL(source)
 				remoteCmd := buildReplicaMySQLCommand(mysqlUser, mysqlPass, remoteSQL)
 				out, execErr := runSSHCommand(replica, timeoutSec, remoteCmd)
 				if execErr != nil {
 					task.Status = "failed"
 					task.Message = "复制命令执行失败: " + out
+					task.RollbackHint = buildRollbackHintFromStatus(preOut)
 				} else {
 					task.Status = "success"
 					task.Message = "复制命令执行成功，已尝试 STOP/CHANGE/START REPLICA。输出: " + out
+					postOut, _ := runSSHCommand(replica, timeoutSec, buildShowReplicaStatusCmd(mysqlUser, mysqlPass))
+					task.PostStatus = postOut
 				}
 			}
 			if err := state.AppendTask(task); err != nil {
@@ -86,6 +95,10 @@ func newBootstrapCmd() *cobra.Command {
 				fmt.Printf("  %d. %s\n", idx+1, step)
 			}
 			fmt.Println(task.Message)
+			if task.RollbackHint != "" {
+				fmt.Println("回滚建议SQL:")
+				fmt.Println(task.RollbackHint)
+			}
 			return nil
 		},
 	}
@@ -97,6 +110,7 @@ func newBootstrapCmd() *cobra.Command {
 	cmd.Flags().IntVar(&timeoutSec, "timeout", 12, "远程执行超时秒数")
 	cmd.Flags().StringVar(&mysqlUser, "mysql-user", "root", "从库本地执行 mysql 的账号")
 	cmd.Flags().StringVar(&mysqlPass, "mysql-pass", "", "从库本地 mysql 账号密码（留空表示无密码）")
+	cmd.Flags().BoolVar(&force, "force", false, "确认执行真实复制变更（仅 dry-run=false 时生效）")
 
 	return cmd
 }
@@ -125,4 +139,35 @@ func escapeSQLString(s string) string {
 
 func shellEscape(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func buildRollbackHintFromStatus(preStatus string) string {
+	m := parseReplicaStatus(preStatus)
+	if len(m) == 0 {
+		return "未能从执行前状态生成回滚 SQL，请人工核对后执行 CHANGE REPLICATION SOURCE TO。"
+	}
+	host := chooseField(m, "Source_Host", "Master_Host")
+	user := chooseField(m, "Source_User", "Master_User")
+	logFile := chooseField(m, "Source_Log_File", "Master_Log_File")
+	logPos := chooseField(m, "Read_Source_Log_Pos", "Read_Master_Log_Pos")
+	autoPos := chooseField(m, "Auto_Position")
+	if host == "" || user == "" {
+		return "执行前未检测到完整复制源信息，请人工回滚。"
+	}
+	if autoPos == "1" {
+		return fmt.Sprintf("STOP REPLICA; CHANGE REPLICATION SOURCE TO SOURCE_HOST='%s', SOURCE_USER='%s', SOURCE_AUTO_POSITION=1; START REPLICA;", escapeSQLString(host), escapeSQLString(user))
+	}
+	if logFile != "" && logPos != "" {
+		return fmt.Sprintf("STOP REPLICA; CHANGE REPLICATION SOURCE TO SOURCE_HOST='%s', SOURCE_USER='%s', SOURCE_LOG_FILE='%s', SOURCE_LOG_POS=%s; START REPLICA;", escapeSQLString(host), escapeSQLString(user), escapeSQLString(logFile), logPos)
+	}
+	return "执行前状态缺少日志位点，建议根据历史配置手工回滚 CHANGE REPLICATION SOURCE TO。"
+}
+
+func chooseField(m map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if val, ok := m[key]; ok && strings.TrimSpace(val) != "" {
+			return strings.TrimSpace(val)
+		}
+	}
+	return ""
 }
